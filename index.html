@@ -72,7 +72,7 @@
         <button class="gpx" id="gpxBtn" type="button">下載 GPX</button>
       </div>
       <div id="map"></div>
-      <p class="note">點紫線或高度圖，黃點會沿路線移動。白箭嘴是行車方向。GPX 是這條參考線，不是大會檔案。底圖 © 香港特別行政區政府地政總署。</p>
+      <p class="note">點紫線或高度圖，黃點會沿路線移動。白箭嘴是行車方向，放大時更密。GPX 是這條參考線，不是大會檔案。底圖 © 香港特別行政區政府地政總署。</p>
     </section>
     <section class="card">
       <h2>高度圖</h2>
@@ -643,16 +643,28 @@ L.tileLayer("https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/tc/WGS84/{
 }).addTo(map);
 const casing = L.polyline(route, {color:"#ffffff", weight:10, opacity:1, interactive:false}).addTo(map);
 const line = L.polyline(route, {color:"#c026d3", weight:5, opacity:1}).addTo(map);
-L.polylineDecorator(line, {
-  patterns: [{
-    offset: "1000m",
-    repeat: "2000m",
+function arrowRepeat(){
+  const z=map.getZoom();
+  if(z>=16) return "250m";
+  if(z>=15) return "400m";
+  if(z>=14) return "600m";
+  if(z>=13) return "900m";
+  if(z>=12) return "1200m";
+  return "1600m";
+}
+const arrows=L.polylineDecorator(line, {patterns:[]}).addTo(map);
+function drawArrows(){
+  arrows.setPatterns([{
+    offset: "80m",
+    repeat: arrowRepeat(),
     symbol: L.Symbol.arrowHead({
       pixelSize: 22, headAngle: 50, polygon: true,
       pathOptions: {fillOpacity:1, weight:2.5, color:"#ffffff", fillColor:"#3b0764"}
     })
-  }]
-}).addTo(map);
+  }]);
+}
+drawArrows();
+map.on("zoomend", drawArrows);
 const cum=[0];
 for(let i=1;i<route.length;i++) cum.push(cum[i-1]+map.distance(route[i-1], route[i]));
 function elevAt(km){
