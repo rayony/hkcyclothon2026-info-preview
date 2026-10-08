@@ -10,7 +10,7 @@ https://rayony.github.io/hkcyclothon2026-info-preview/
 
 https://www.discoverhongkong.com/tc/events/cyclothon.html
 
-https://www.youtube.com/watch?si=1jr4i4N4YyAOqbFF&v=uu73cLqSeYs
+https://www.youtube.com/watch?v=uu73cLqSeYs
 
 ## 免責聲明
 
