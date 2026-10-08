@@ -53,6 +53,9 @@
   .gate-pin b.on { background: #6b3fa0; transform: scale(1.15); }
   .leaflet-labels-pane { z-index: 250 !important; pointer-events: none; }
   .leaflet-overlay-pane { z-index: 400; }
+  button.gpx { font: inherit; font-size: 13px; font-weight: 650; background: #6b3fa0; color: #fff; border: 0; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card-head h2 { margin: 0; }
 </style>
 </head>
 <body>
@@ -64,9 +67,12 @@
 <div class="wrap">
   <div class="grid">
     <section class="card">
-      <h2>地圖</h2>
+      <div class="card-head">
+        <h2>地圖</h2>
+        <button class="gpx" id="gpxBtn" type="button">下載 GPX</button>
+      </div>
       <div id="map"></div>
-      <p class="note">點紫線，高度圖會以箭嘴標出大約公里。底圖 © 香港特別行政區政府地政總署。路線畫白邊，避免被詳細地圖吞掉。</p>
+      <p class="note">點紫線或高度圖，黃點會沿路線移動。白箭嘴是行車方向。GPX 是這條參考線，不是大會檔案。底圖 © 香港特別行政區政府地政總署。</p>
     </section>
     <section class="card">
       <h2>高度圖</h2>
@@ -100,6 +106,7 @@
   </section>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
 <script>
 const gates = [
   {km:0, t:"05:15", name:"起點 博物館道", note:"起步", lat:22.30110, lng:114.15620, elev:5},
@@ -636,8 +643,35 @@ L.tileLayer("https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/tc/WGS84/{
 }).addTo(map);
 const casing = L.polyline(route, {color:"#ffffff", weight:10, opacity:1, interactive:false}).addTo(map);
 const line = L.polyline(route, {color:"#c026d3", weight:5, opacity:1}).addTo(map);
+L.polylineDecorator(line, {
+  patterns: [{
+    offset: "4%",
+    repeat: "1600m",
+    symbol: L.Symbol.arrowHead({
+      pixelSize: 11, headAngle: 55, polygon: true,
+      pathOptions: {fillOpacity:1, weight:1.5, color:"#ffffff", fillColor:"#4a1268"}
+    })
+  }]
+}).addTo(map);
 const cum=[0];
 for(let i=1;i<route.length;i++) cum.push(cum[i-1]+map.distance(route[i-1], route[i]));
+function elevAt(km){
+  let a=profile[0], b=profile[profile.length-1];
+  for(let i=1;i<profile.length;i++){
+    if(profile[i][0]>=km){ a=profile[i-1]; b=profile[i]; break; }
+  }
+  const t=Math.min(1, Math.max(0, (km-a[0])/((b[0]-a[0])||1)));
+  return a[1]+(b[1]-a[1])*t;
+}
+function pointAtKm(km){
+  const target=(km/56)*cum[cum.length-1];
+  let i=1;
+  while(i<cum.length-1 && cum[i]<target) i++;
+  const span=cum[i]-cum[i-1] || 1;
+  const t=Math.min(1, Math.max(0, (target-cum[i-1])/span));
+  const a=route[i-1], b=route[i];
+  return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
+}
 function kmAt(latlng){
   let best=0, bd=1e18;
   for(let i=0;i<route.length;i++){
@@ -650,13 +684,17 @@ let cursorKm=null;
 const cursorMark=L.circleMarker(route[0], {
   radius:8, color:"#111", weight:2, fillColor:"#ffe14a", fillOpacity:1, pane:"gates"
 });
-function showCursor(latlng){
-  const hit=kmAt(latlng);
-  cursorKm=hit.km;
-  cursorMark.setLatLng(hit.ll);
+function placeCursor(km, pan){
+  cursorKm=Math.min(56, Math.max(0, km));
+  const ll=pointAtKm(cursorKm);
+  cursorMark.setLatLng(ll);
   if(!map.hasLayer(cursorMark)) cursorMark.addTo(map);
-  document.getElementById("cursorLab").textContent="約 "+hit.km.toFixed(1)+" km";
+  document.getElementById("cursorLab").textContent="約 "+cursorKm.toFixed(1)+" km";
   draw();
+  if(pan) map.panTo(ll);
+}
+function showCursor(latlng){
+  placeCursor(kmAt(latlng).km, false);
 }
 line.on("click", e=>{ L.DomEvent.stopPropagation(e); showCursor(e.latlng); });
 function pinIcon(text, on){
@@ -711,14 +749,6 @@ function draw(){
   const Y=e=>T+(1-(e-minY)/(maxY-minY))*(H-T-B);
   let d="";
   profile.forEach((p,i)=>{ d+=(i?"L":"M")+X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1); });
-  function elevAt(km){
-    let a=profile[0], b=profile[profile.length-1];
-    for(let i=1;i<profile.length;i++){
-      if(profile[i][0]>=km){ a=profile[i-1]; b=profile[i]; break; }
-    }
-    const t=Math.min(1, Math.max(0, (km-a[0])/((b[0]-a[0])||1)));
-    return a[1]+(b[1]-a[1])*t;
-  }
   let arrow="";
   if(cursorKm!=null){
     const x=X(cursorKm), y=Y(elevAt(cursorKm));
@@ -730,7 +760,19 @@ function draw(){
   const marks=gates.map((g,i)=>`<line x1="${X(g.km)}" x2="${X(g.km)}" y1="${T}" y2="${H-B}" stroke="${i===sel?"#6b3fa0":"#e7d3c0"}" stroke-dasharray="${i===sel?"0":"3 3"}"/><circle cx="${X(g.km)}" cy="${Y(g.elev)}" r="${i===sel?5:3.5}" fill="${i===sel?"#6b3fa0":"#e07a2f"}" data-i="${i}" style="cursor:pointer"/>`).join("");
   const labels=[0,14,28,42,56].map(k=>`<text x="${X(k)}" y="${H-8}" text-anchor="middle" font-size="11" fill="#6d6258">${k}</text>`).join("");
   svg.innerHTML=`<rect width="${W}" height="${H}" fill="#fffdf8"/>${ticks}<path d="${d} L${X(56)},${Y(minY)} L${X(0)},${Y(minY)} Z" fill="#d7c6f0"/><path d="${d}" fill="none" stroke="#5c2d91" stroke-width="2"/><line x1="${L}" x2="${W-R}" y1="${Y(0)}" y2="${Y(0)}" stroke="#888" stroke-dasharray="4 3"/>${marks}${arrow}${labels}`;
-  svg.querySelectorAll("circle").forEach(c=>c.addEventListener("click",()=>select(+c.dataset.i)));
+  svg.onclick=(ev)=>{
+    const c=ev.target.closest && ev.target.closest("circle[data-i]");
+    let km;
+    if(c){
+      select(+c.dataset.i);
+      km=gates[+c.dataset.i].km;
+    }else{
+      const rect=svg.getBoundingClientRect();
+      const x=(ev.clientX-rect.left)/rect.width*W;
+      km=(x-L)/(W-L-R)*56;
+    }
+    if(km>=0 && km<=56) placeCursor(km, true);
+  };
 }
 function select(i){
   sel=i;
@@ -738,6 +780,24 @@ function select(i){
   map.panTo([gates[i].lat, gates[i].lng]);
 }
 document.getElementById("spd").addEventListener("input", e=>render(+e.target.value));
+document.getElementById("gpxBtn").addEventListener("click", ()=>{
+  const total=cum[cum.length-1] || 1;
+  const pts=route.map((p,i)=>{
+    const km=cum[i]/total*56;
+    return `<trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"><ele>${elevAt(km).toFixed(1)}</ele></trkpt>`;
+  }).join("");
+  const xml=`<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="hkcyclothon2026-info-preview" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>2026香港單車節56公里組參考路線</name><desc>非正式重建，只供參考。請以大會官方資料為準。https://www.discoverhongkong.com/tc/events/cyclothon.html</desc></metadata>
+  <trk><name>56 km reference</name><trkseg>${pts}</trkseg></trk>
+</gpx>`;
+  const blob=new Blob([xml], {type:"application/gpx+xml"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="hkcyclothon2026-56km-reference.gpx";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+});
 document.body.addEventListener("click", e=>{
   const t=e.target.closest("tr[data-i]");
   if(t) select(+t.dataset.i);
