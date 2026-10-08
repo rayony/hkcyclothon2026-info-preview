@@ -645,11 +645,11 @@ const casing = L.polyline(route, {color:"#ffffff", weight:10, opacity:1, interac
 const line = L.polyline(route, {color:"#c026d3", weight:5, opacity:1}).addTo(map);
 L.polylineDecorator(line, {
   patterns: [{
-    offset: "4%",
-    repeat: "1600m",
+    offset: "1000m",
+    repeat: "2000m",
     symbol: L.Symbol.arrowHead({
-      pixelSize: 11, headAngle: 55, polygon: true,
-      pathOptions: {fillOpacity:1, weight:1.5, color:"#ffffff", fillColor:"#4a1268"}
+      pixelSize: 22, headAngle: 50, polygon: true,
+      pathOptions: {fillOpacity:1, weight:2.5, color:"#ffffff", fillColor:"#3b0764"}
     })
   }]
 }).addTo(map);
