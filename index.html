@@ -88,7 +88,7 @@
         <span><i class="sw" style="background:#e07a2f"></i>檢查站</span>
         <span><i class="sw" style="background:#b42318"></i>分段下限過高</span>
       </div>
-      <p class="note">高度圖仍然適用。路段冇變：青馬、汀九橋面約 60 米，昂船洲約 76 米，尖山同沙田嶺用路面而唔跟山體，繞道中段約 −50 mPD，折返所以下潛畫兩次。36.2 沿沙田嶺出口移前約 0.6 公里，該處路面仍約 20 米，曲線唔使改。呢條唔係大會實測 GPX。</p>
+      <p class="note">高度圖的公里已對齊檢查站，唔再把整條線均勻拉成 56 公里。昂船洲高點約在 28 公里，繞道最深仍在去程 47.4 同回程 52.2。GPX 高程用同一套對照。呢條唔係大會實測。</p>
     </section>
   </div>
   <section class="card">
@@ -608,7 +608,7 @@ const route = [
   [22.30128,114.15624],
   [22.30116,114.15624]
 ];
-const profile = [[0,5],[4,8],[8,18],[11,28],[12.9,32],[14.2,65],[15.4,66],[16.8,64],[18.2,40],[19.4,62],[20.6,35],[22.5,22],[24.8,30],[26,76],[27.4,40],[30.7,28],[32.7,55],[34.8,42],[36.2,22],[37.6,42],[39.7,55],[41.7,28],[43.5,12],[45.1,6],[47.4,-50],[49.6,-8],[50.6,8],[52.2,-50],[54.2,6],[55,12],[56,5]];
+const profile = [[0,5],[4,8],[8,18],[11,28],[12.9,32],[14.2,65],[15.4,66],[16.8,64],[18.2,40],[19.8,62],[22.5,30],[26,28],[28,76],[29.3,40],[30.7,28],[32.7,55],[34.8,42],[36.2,22],[37.6,42],[38.7,55],[39.8,28],[42,12],[45.1,6],[47.4,-50],[49.6,-8],[52.2,-50],[54.2,6],[55,12],[56,5]];
 
 function mins(hhmm){ const [h,m]=hhmm.split(":").map(Number); return h*60+m; }
 const start = mins("05:15");
@@ -662,22 +662,55 @@ function elevAt(km){
   const t=Math.min(1, Math.max(0, (km-a[0])/((b[0]-a[0])||1)));
   return a[1]+(b[1]-a[1])*t;
 }
-function pointAtKm(km){
-  const target=(km/56)*cum[cum.length-1];
+const anchors=[];
+let anchorFrom=0;
+gates.forEach(g=>{
+  let best=anchorFrom, bd=1e18;
+  for(let i=anchorFrom;i<route.length;i++){
+    const d=map.distance(g, route[i]);
+    if(d<bd){ bd=d; best=i; }
+  }
+  anchors.push({km:g.km, d:cum[best]});
+  anchorFrom=best;
+});
+function distAtKm(km){
+  if(km<=anchors[0].km) return anchors[0].d;
+  for(let i=1;i<anchors.length;i++){
+    const a=anchors[i-1], b=anchors[i];
+    if(km<=b.km){
+      const t=(km-a.km)/((b.km-a.km)||1);
+      return a.d+(b.d-a.d)*t;
+    }
+  }
+  return anchors[anchors.length-1].d;
+}
+function kmAtDist(d){
+  if(d<=anchors[0].d) return anchors[0].km;
+  for(let i=1;i<anchors.length;i++){
+    const a=anchors[i-1], b=anchors[i];
+    if(d<=b.d){
+      const t=(d-a.d)/((b.d-a.d)||1);
+      return a.km+(b.km-a.km)*t;
+    }
+  }
+  return anchors[anchors.length-1].km;
+}
+function pointAtDist(d){
   let i=1;
-  while(i<cum.length-1 && cum[i]<target) i++;
-  const span=cum[i]-cum[i-1] || 1;
-  const t=Math.min(1, Math.max(0, (target-cum[i-1])/span));
+  while(i<cum.length-1 && cum[i]<d) i++;
+  const span=cum[i]-cum[i-1]||1;
+  const t=Math.min(1, Math.max(0, (d-cum[i-1])/span));
   const a=route[i-1], b=route[i];
   return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
 }
+function pointAtKm(km){ return pointAtDist(distAtKm(km)); }
 function kmAt(latlng){
   let best=0, bd=1e18;
   for(let i=0;i<route.length;i++){
     const d=map.distance(latlng, route[i]);
     if(d<bd){ bd=d; best=i; }
   }
-  return {km: cum[best]/cum[cum.length-1]*56, ll: route[best]};
+  return {km: kmAtDist(cum[best]), ll: route[best]};
 }
 let cursorKm=null;
 const cursorMark=L.circleMarker(route[0], {
@@ -780,9 +813,8 @@ function select(i){
 }
 document.getElementById("spd").addEventListener("input", e=>render(+e.target.value));
 document.getElementById("gpxBtn").addEventListener("click", ()=>{
-  const total=cum[cum.length-1] || 1;
   const pts=route.map((p,i)=>{
-    const km=cum[i]/total*56;
+    const km=kmAtDist(cum[i]);
     return `<trkpt lat="${p[0].toFixed(6)}" lon="${p[1].toFixed(6)}"><ele>${elevAt(km).toFixed(1)}</ele></trkpt>`;
   }).join("");
   const xml=`<?xml version="1.0" encoding="UTF-8"?>
